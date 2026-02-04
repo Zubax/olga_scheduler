@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <cavl.h> // Add to your include paths: https://github.com/pavel-kirienko/cavl
+#include <cavl2.h> // Add to your include paths: https://github.com/pavel-kirienko/cavl
 
 #include <assert.h>
 #include <stdint.h>
@@ -37,16 +37,21 @@ extern "C"
 /// The time units can be arbitrary.
 typedef struct olga_event_t
 {
-    CAVL2_T base;
-    int64_t deadline;
-    void*   user;
+    CAVL2_T  base;
+    int64_t  deadline;
+    uint64_t seqno;
+    void*    user;
     void (*handler)(void* user, int64_t now);
 } olga_event_t;
+
+// TODO: provide C++ version also with ifdef
+#define OLGA_EVENT_INIT ((olga_event_t){ { NULL } })
 
 /// The main scheduler type.
 typedef struct olga_t
 {
     CAVL2_T* events;
+    uint64_t next_seqno;
     void*    user;
     int64_t (*now)(void* user);
 } olga_t;
@@ -68,15 +73,24 @@ static inline void olga_init(olga_t* const self, void* const user, int64_t (*con
     // TODO implement
 }
 
-static inline CAVL2_RELATION olga_private_compare_deadline(const void* user, const CAVL2_T* event)
+// INTERNAL USE ONLY.
+static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_T* event)
 {
-    const int64_t outer = *(const int64_t*)user;
-    const int64_t inner = ((const olga_event_t*)event)->deadline;
-    return (outer == inner) ? 0 : ((outer > inner) ? +1 : -1);
+    const olga_event_t* outer = (const olga_event_t*)user;
+    const olga_event_t* inner = (const olga_event_t*)event;
+    // TODO: check the sign correctness, we need the soonest on the left of the tree.
+    if (outer->deadline != inner->deadline) {
+        return (outer->deadline > inner->deadline) ? +1 : -1;
+    }
+    return (outer->seqno > inner->seqno) ? +1 : -1;
 }
 
 /// Schedule a one-time event.
 /// The handler will be invoked at or asap after the deadline; the actual invocation time will be provided.
+/// The caller guarantees that the event is NOT currently in the tree, otherwise behavior undefined.
+/// Use olga_cancel() to cancel an event beforehand.
+/// Events are already canceled prior to handler invocation, so it is safe to re-register immediately from the handler.
+/// The complexity is logarithmic in the number of pending events.
 static inline void olga_defer(olga_t* const self,
                               const int64_t deadline,
                               void* const   user,
@@ -90,6 +104,8 @@ static inline void olga_defer(olga_t* const self,
 }
 
 /// No effect if the event has already been completed.
+/// It is safe to cancel a freshly creted event if it has been initialized with OLGA_EVENT_INIT.
+/// The complexity is logarithmic in the number of pending events.
 static inline void olga_cancel(olga_t* const self, olga_event_t* const event)
 {
     assert(self != NULL);
