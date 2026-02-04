@@ -26,8 +26,7 @@
 #include <utility>
 #include <variant>
 
-namespace olga_scheduler
-{
+namespace olga_scheduler {
 
 template <typename TimePoint>
 class Event;
@@ -66,10 +65,10 @@ concept Callback = std::invocable<Fun, const Arg<TimePoint>&>;
 template <typename TimePoint>
 class Event : private cavl::Node<Event<TimePoint>>
 {
-    friend class cavl::Node<Event>;  // This friendship is required for the AVL tree implementation,
-    friend class cavl::Tree<Event>;  // otherwise, we would have to use public inheritance, which is undesirable.
+    friend class cavl::Node<Event>; // This friendship is required for the AVL tree implementation,
+    friend class cavl::Tree<Event>; // otherwise, we would have to use public inheritance, which is undesirable.
 
-public:
+  public:
     Event(const Event&)                      = delete;
     Event& operator=(const Event&)           = delete;
     Event& operator=(Event&& other) noexcept = delete;
@@ -81,8 +80,7 @@ public:
     void cancel() noexcept
     {
         /// It is guaranteed that while an event resides in the tree, it has a valid deadline set.
-        if (deadline_ != TimePoint::min())
-        {
+        if (deadline_ != TimePoint::min()) {
             // Removing a non-existent node from the tree is an UB that may lead to memory corruption,
             // so we have to check first if the event is actually registered.
             remove();
@@ -100,10 +98,10 @@ public:
     // This method is necessary to store an Event in cetl::unbounded_variant
     static constexpr std::array<std::uint8_t, 16> _get_type_id_() noexcept
     {
-        return {0xB6, 0x87, 0x48, 0xA6, 0x7A, 0xDB, 0x4D, 0xF1, 0xB3, 0x1D, 0xA9, 0x8D, 0x50, 0xA7, 0x82, 0x47};
+        return { 0xB6, 0x87, 0x48, 0xA6, 0x7A, 0xDB, 0x4D, 0xF1, 0xB3, 0x1D, 0xA9, 0x8D, 0x50, 0xA7, 0x82, 0x47 };
     }
 
-protected:
+  protected:
     using Tree = cavl::Tree<Event>;
     using cavl::Node<Event>::remove;
 
@@ -120,10 +118,11 @@ protected:
                (this->getParentNode() == nullptr));
     }
 
-    Event(Event&& other) noexcept :
-        cavl::Node<Event>{std::move(static_cast<cavl::Node<Event>&>(other))},
-        deadline_{std::exchange(other.deadline_, TimePoint::min())}
-    {}
+    Event(Event&& other) noexcept
+      : cavl::Node<Event>{ std::move(static_cast<cavl::Node<Event>&>(other)) }
+      , deadline_{ std::exchange(other.deadline_, TimePoint::min()) }
+    {
+    }
 
     /// Ensure the event is in the tree and set the deadline to the specified absolute time point.
     /// If the event is already scheduled, the old deadline is overwritten.
@@ -131,17 +130,17 @@ protected:
     void schedule(const TimePoint dead, Tree& tree) noexcept
     {
         cancel();
-        deadline_               = dead;  // The deadline shall be set before the event is inserted into the tree.
+        deadline_               = dead; // The deadline shall be set before the event is inserted into the tree.
         const auto ptr_existing = tree.search(
-            [dead](const Event& other) {
-                /// No two deadlines compare equal, which allows us to have multiple nodes with the same deadline in
-                /// the tree. With two nodes sharing the same deadline, the one added later is considered to be later.
-                return (dead >= other.deadline_) ? +1 : -1;
-            },
-            [this] { return this; });
+          [dead](const Event& other) {
+              /// No two deadlines compare equal, which allows us to have multiple nodes with the same deadline in
+              /// the tree. With two nodes sharing the same deadline, the one added later is considered to be later.
+              return (dead >= other.deadline_) ? +1 : -1;
+          },
+          [this] { return this; });
         assert(std::get<0>(ptr_existing) == this);
         assert(!std::get<1>(ptr_existing));
-        (void) ptr_existing;
+        (void)ptr_existing;
     }
 
     /// The execution handler shall either reschedule or cancel the event
@@ -150,7 +149,7 @@ protected:
     /// because the user may choose to cancel the event from the callback.
     virtual void execute(const Arg<TimePoint>& args, Tree& tree) = 0;
 
-private:
+  private:
     TimePoint deadline_ = TimePoint::min();
 };
 
@@ -183,22 +182,22 @@ struct SpinResult final
 template <typename Clock>
 class EventLoop final
 {
-public:
+  public:
     using time_point = typename Clock::time_point;
     using duration   = typename Clock::duration;
 
-private:
+  private:
     /// This proxy is needed to expose the protected execute() method to the event loop.
     /// An alternative would be to make this class a friend of the Event class,
     /// or to make the execute() method public, which is undesirable.
     class EventProxy : public Event<time_point>
     {
-    public:
+      public:
         using Event<time_point>::execute;
         using Event<time_point>::_get_type_id_;
     };
 
-public:
+  public:
     EventLoop() = default;
 
     EventLoop(const EventLoop&)                = delete;
@@ -220,18 +219,20 @@ public:
     {
         class Impl final : public EventProxy
         {
-        public:
-            Impl(EventLoop& owner, const duration per, Fun&& fun) : period_{per}, handler_{std::move(fun)}
+          public:
+            Impl(EventLoop& owner, const duration per, Fun&& fun)
+              : period_{ per }
+              , handler_{ std::move(fun) }
             {
                 this->schedule(Clock::now() + period_, owner.tree_);
             }
 
             using EventProxy::_get_type_id_;
 
-        private:
+          private:
             void execute(const Arg<time_point>& args, Tree& tree) override
             {
-                this->schedule(args.deadline + period_, tree);  // Strict period advancement, no phase error growth.
+                this->schedule(args.deadline + period_, tree); // Strict period advancement, no phase error growth.
                 handler_(args);
             }
 
@@ -239,7 +240,7 @@ public:
             const Fun      handler_;
         };
         assert(period > duration::zero());
-        return Impl{*this, period, std::forward<Fun>(handler)};
+        return Impl{ *this, period, std::forward<Fun>(handler) };
     }
 
     /// This is like repeat() with one crucial difference: the next deadline is defined not as (deadline+period),
@@ -253,18 +254,20 @@ public:
     {
         class Impl final : public EventProxy
         {
-        public:
-            Impl(EventLoop& owner, const duration per, Fun&& fun) : min_period_{per}, handler_{std::move(fun)}
+          public:
+            Impl(EventLoop& owner, const duration per, Fun&& fun)
+              : min_period_{ per }
+              , handler_{ std::move(fun) }
             {
                 this->schedule(Clock::now() + min_period_, owner.tree_);
             }
 
             using EventProxy::_get_type_id_;
 
-        private:
+          private:
             void execute(const Arg<time_point>& args, Tree& tree) override
             {
-                this->schedule(args.approx_now + min_period_, tree);  // Accumulate phase error intentionally.
+                this->schedule(args.approx_now + min_period_, tree); // Accumulate phase error intentionally.
                 handler_(args);
             }
 
@@ -272,7 +275,7 @@ public:
             const Fun      handler_;
         };
         assert(min_period > duration::zero());
-        return Impl{*this, min_period, std::forward<Fun>(handler)};
+        return Impl{ *this, min_period, std::forward<Fun>(handler) };
     }
 
     /// Like repeat() but the handler will be invoked only once and the event is canceled afterward.
@@ -282,15 +285,16 @@ public:
     {
         class Impl final : public EventProxy
         {
-        public:
-            Impl(EventLoop& owner, const time_point deadline, Fun&& fun) : handler_{std::move(fun)}
+          public:
+            Impl(EventLoop& owner, const time_point deadline, Fun&& fun)
+              : handler_{ std::move(fun) }
             {
                 this->schedule(deadline, owner.tree_);
             }
 
             using EventProxy::_get_type_id_;
 
-        private:
+          private:
             void execute(const Arg<time_point>& args, Tree&) override
             {
                 this->cancel();
@@ -299,7 +303,7 @@ public:
 
             const Fun handler_;
         };
-        return Impl{*this, deadline, std::forward<Fun>(handler)};
+        return Impl{ *this, deadline, std::forward<Fun>(handler) };
     }
 
     /// Execute pending events strictly in the order of their deadlines until there are no pending events left.
@@ -311,35 +315,33 @@ public:
     template <typename ExecutionMonitor = std::monostate>
     [[nodiscard]] SpinResult<Clock> spin()
     {
-        SpinResult<Clock> result{.next_deadline  = time_point::max(),
-                                 .worst_lateness = duration::zero(),
-                                 .approx_now     = time_point::min()};
-        if (tree_.empty()) [[unlikely]]
-        {
+        SpinResult<Clock> result{ .next_deadline  = time_point::max(),
+                                  .worst_lateness = duration::zero(),
+                                  .approx_now     = time_point::min() };
+        if (tree_.empty()) [[unlikely]] {
             result.approx_now = Clock::now();
             return result;
         }
 
-        while (auto* const evt = static_cast<EventProxy*>(tree_.min()))
-        {
+        while (auto* const evt = static_cast<EventProxy*>(tree_.min())) {
             // The deadline is guaranteed to be set because it is in the tree.
             const auto deadline = evt->getDeadline();
-            if (result.approx_now < deadline)  // Too early -- either we need to sleep or the time sample is obsolete.
+            if (result.approx_now < deadline) // Too early -- either we need to sleep or the time sample is obsolete.
             {
-                result.approx_now = Clock::now();  // The number of calls to Clock::now() is minimized.
-                if (result.approx_now < deadline)  // Nope, even with the latest time sample we are still early -- exit.
+                result.approx_now = Clock::now(); // The number of calls to Clock::now() is minimized.
+                if (result.approx_now < deadline) // Nope, even with the latest time sample we are still early -- exit.
                 {
                     result.next_deadline = deadline;
                     break;
                 }
             }
             {
-                ExecutionMonitor monitor{};  // RAII indication of the start and end of the event execution.
+                ExecutionMonitor monitor{}; // RAII indication of the start and end of the event execution.
                 // Execution will remove the event from the tree and then possibly re-insert it with a new deadline.
-                evt->execute({.event = *evt, .deadline = deadline, .approx_now = result.approx_now}, tree_);
-                (void) monitor;
+                evt->execute({ .event = *evt, .deadline = deadline, .approx_now = result.approx_now }, tree_);
+                (void)monitor;
             }
-            result.next_deadline  = time_point::max();  // Reset the next deadline to the maximum possible value.
+            result.next_deadline  = time_point::max(); // Reset the next deadline to the maximum possible value.
             result.worst_lateness = std::max(result.worst_lateness, result.approx_now - deadline);
         }
 
@@ -355,11 +357,11 @@ public:
     /// The nodes are ordered such that the earliest deadline is on the left.
     const auto& getTree() const noexcept { return tree_; }
 
-private:
+  private:
     using Tree = cavl::Tree<Event<time_point>>;
 
     Tree tree_;
 
-};  // EventLoop
+}; // EventLoop
 
-}  // namespace olga_scheduler
+} // namespace olga_scheduler

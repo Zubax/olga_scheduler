@@ -22,7 +22,8 @@ if (NOT clang_format)
     message(STATUS "Could not locate clang-format")
 else ()
     file(GLOB format_files
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/*.[ch]pp
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/*/*.h*
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.[ch]*
     )
     message(STATUS "Using clang-format: ${clang_format}; files: ${format_files}")
     add_custom_target(format COMMAND ${clang_format} -i -fallback-style=none -style=file --verbose ${format_files})
