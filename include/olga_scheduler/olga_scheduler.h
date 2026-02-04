@@ -32,7 +32,7 @@ extern "C"
 #endif
 
 /// Represents a user-handled future event.
-/// When the handler is invoked, the even is already removed from the scheduler.
+/// When the handler is invoked, the event is already removed from the scheduler.
 /// If necessary, it can be re-inserted immediately from within the handler with a new deadline.
 /// The time units can be arbitrary.
 typedef struct olga_event_t
@@ -44,19 +44,20 @@ typedef struct olga_event_t
     void (*handler)(void* user, int64_t now);
 } olga_event_t;
 
-// TODO: provide C++ version also with ifdef
+// Convenience initializer for a fresh event (all fields zeroed, base pointers NULL).
 #define OLGA_EVENT_INIT ((olga_event_t){ { NULL } })
 
 /// The main scheduler type.
 typedef struct olga_t
 {
     CAVL2_T* events;
-    uint64_t next_seqno;
+    uint64_t next_seqno; ///< Monotonic sequence number for FIFO ordering of equal-deadline events.
     void*    user;
     int64_t (*now)(void* user);
 } olga_t;
 
 /// Current state assessment returned from olga_spin().
+/// The `now` field contains the last sampled time from the user-provided clock, or INT64_MIN if not sampled.
 typedef struct olga_spin_result_t
 {
     int64_t next_deadline;
@@ -70,25 +71,30 @@ static inline void olga_init(olga_t* const self, void* const user, int64_t (*con
 {
     assert(self != NULL);
     assert(now != NULL);
-    // TODO implement
+    self->events     = NULL;
+    self->next_seqno = 0U;
+    self->user       = user;
+    self->now        = now;
 }
 
 // INTERNAL USE ONLY.
 static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_T* event)
 {
-    const olga_event_t* outer = (const olga_event_t*)user;
-    const olga_event_t* inner = (const olga_event_t*)event;
-    // TODO: check the sign correctness, we need the soonest on the left of the tree.
+    const olga_event_t* const outer = (const olga_event_t*)user;
+    const olga_event_t* const inner = (const olga_event_t*)event;
     if (outer->deadline != inner->deadline) {
-        return (outer->deadline > inner->deadline) ? +1 : -1;
+        return (outer->deadline > inner->deadline) ? +1 : -1; // Later deadlines go to the right.
     }
-    return (outer->seqno > inner->seqno) ? +1 : -1;
+    if (outer->seqno != inner->seqno) {
+        return (outer->seqno > inner->seqno) ? +1 : -1; // Later insertion goes to the right.
+    }
+    return 0;
 }
 
 /// Schedule a one-time event.
 /// The handler will be invoked at or asap after the deadline; the actual invocation time will be provided.
-/// The caller guarantees that the event is NOT currently in the tree, otherwise behavior undefined.
-/// Use olga_cancel() to cancel an event beforehand.
+/// The caller guarantees that the event is NOT currently in the tree; otherwise behavior is undefined.
+/// Use olga_cancel() to cancel an event beforehand. The event may be uninitialized.
 /// Events are already canceled prior to handler invocation, so it is safe to re-register immediately from the handler.
 /// The complexity is logarithmic in the number of pending events.
 static inline void olga_defer(olga_t* const self,
@@ -100,26 +106,54 @@ static inline void olga_defer(olga_t* const self,
     assert(self != NULL);
     assert(handler != NULL);
     assert(out_event != NULL);
-    // TODO schedule the event
+    out_event->deadline = deadline;
+    out_event->seqno    = self->next_seqno++;
+    out_event->user     = user;
+    out_event->handler  = handler;
+    (void)cavl2_find_or_insert(&self->events, out_event, olga_private_compare, out_event, cavl2_trivial_factory);
 }
 
 /// No effect if the event has already been completed.
-/// It is safe to cancel a freshly creted event if it has been initialized with OLGA_EVENT_INIT.
+/// It is safe to cancel a freshly created event if it has been initialized with OLGA_EVENT_INIT.
 /// The complexity is logarithmic in the number of pending events.
 static inline void olga_cancel(olga_t* const self, olga_event_t* const event)
 {
     assert(self != NULL);
     assert(event != NULL);
-    // TODO use cavl2_remove_if().
+    (void)cavl2_remove_if(&self->events, &event->base);
+    event->deadline = INT64_MIN;
 }
 
 /// Execute pending events strictly in the order of their deadlines until there are no pending events left.
 /// Events with the same deadline are executed in the FIFO order.
+/// The handler receives a freshly sampled `now` taken immediately before invocation.
 /// This method should be invoked regularly to pump the event loop.
 static inline olga_spin_result_t olga_spin(olga_t* const self)
 {
     assert(self != NULL);
-    // TODO spin until no ready events left, return the deadline of the soonest
+    olga_spin_result_t out = { .next_deadline = INT64_MAX, .worst_lateness = 0, .now = INT64_MIN };
+    for (;;) {
+        olga_event_t* const event = (olga_event_t*)cavl2_min(self->events);
+        if (event == NULL) {
+            out.next_deadline = INT64_MAX;
+            break;
+        }
+        const int64_t deadline = event->deadline;
+        out.now                = self->now(self->user);
+        if (out.now < deadline) {
+            out.next_deadline = deadline;
+            break;
+        }
+        cavl2_remove(&self->events, &event->base);
+        event->deadline = INT64_MIN;
+        event->handler(event->user, out.now);
+
+        const int64_t lateness = out.now - deadline; // Non-negative because now >= deadline.
+        if (lateness > out.worst_lateness) {
+            out.worst_lateness = lateness;
+        }
+    }
+    return out;
 }
 
 #ifdef __cplusplus
