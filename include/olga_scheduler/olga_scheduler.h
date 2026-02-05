@@ -98,8 +98,8 @@ static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_
 
 /// Schedule a one-time event.
 /// The handler will be invoked at or asap after the deadline; the actual invocation time will be provided.
-/// The caller guarantees that the event is NOT currently in the tree; otherwise behavior is undefined.
-/// Use olga_cancel() to cancel an event beforehand. The event may be uninitialized.
+/// If the event is already scheduled, it will be automatically rescheduled with the new deadline.
+/// The event must be either zero-initialized using OLGA_EVENT_INIT or have been used at least once.
 /// Events are already canceled prior to handler invocation, so it is safe to re-register immediately from the handler.
 /// The complexity is logarithmic in the number of pending events.
 static inline void olga_defer(olga_t* const self,
@@ -111,6 +111,7 @@ static inline void olga_defer(olga_t* const self,
     assert(self != NULL);
     assert(handler != NULL);
     assert(out_event != NULL);
+    (void)cavl2_remove_if(&self->events, &out_event->base);
     out_event->deadline = deadline;
     out_event->seqno    = self->next_seqno++;
     out_event->user     = user;

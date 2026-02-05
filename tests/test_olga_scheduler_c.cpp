@@ -269,4 +269,99 @@ TEST(OlgaSchedulerC, WorstLatenessKeepsMax)
     EXPECT_EQ(log.times, (std::vector<int64_t>{ 100, 100 }));
 }
 
+TEST(OlgaSchedulerC, RescheduleAlreadyScheduled)
+{
+    TestClock clock{ .now = 0 };
+    olga_t    sched;
+    olga_init(&sched, &clock, clock_now);
+
+    CallLog     log{};
+    CallbackCtx ctx_a{ .log = &log, .id = 1, .expected_deadline = INT64_MIN, .clock = &clock, .advance_by = 0 };
+    CallbackCtx ctx_b{ .log = &log, .id = 2, .expected_deadline = INT64_MIN, .clock = &clock, .advance_by = 0 };
+
+    olga_event_t evt_a = OLGA_EVENT_INIT;
+    olga_event_t evt_b = OLGA_EVENT_INIT;
+
+    // Schedule event A at 100 and event B at 200
+    olga_defer(&sched, 100, &ctx_a, record_handler, &evt_a);
+    olga_defer(&sched, 200, &ctx_b, record_handler, &evt_b);
+
+    // Reschedule event A to 300 (later than B)
+    olga_defer(&sched, 300, &ctx_a, record_handler, &evt_a);
+
+    // Now spin at time 250 - only B should fire (at 200)
+    clock.now              = 250;
+    olga_spin_result_t out = olga_spin(&sched);
+    EXPECT_EQ(out.next_deadline, 300); // A is rescheduled to 300
+    EXPECT_EQ(out.worst_lateness, 50);
+    EXPECT_EQ(out.now, 250);
+    EXPECT_EQ(log.ids, (std::vector<int>{ 2 })); // Only B fired
+    EXPECT_EQ(log.times, (std::vector<int64_t>{ 250 }));
+    log.ids.clear();
+    log.times.clear();
+
+    // Advance to 350 and spin - now A should fire
+    clock.now = 350;
+    out       = olga_spin(&sched);
+    EXPECT_EQ(out.next_deadline, INT64_MAX);
+    EXPECT_EQ(out.worst_lateness, 50);
+    EXPECT_EQ(out.now, 350);
+    EXPECT_EQ(log.ids, (std::vector<int>{ 1 })); // A fired
+    EXPECT_EQ(log.times, (std::vector<int64_t>{ 350 }));
+}
+
+TEST(OlgaSchedulerC, RescheduleBeforeAndAfter)
+{
+    TestClock clock{ .now = 0 };
+    olga_t    sched;
+    olga_init(&sched, &clock, clock_now);
+
+    CallLog     log{};
+    CallbackCtx ctx{ .log = &log, .id = 1, .expected_deadline = INT64_MIN, .clock = &clock, .advance_by = 0 };
+
+    olga_event_t evt = OLGA_EVENT_INIT;
+
+    // Schedule event at 500
+    olga_defer(&sched, 500, &ctx, record_handler, &evt);
+
+    // Reschedule to earlier time (100)
+    olga_defer(&sched, 100, &ctx, record_handler, &evt);
+
+    // Spin at 150 - event should fire at 100
+    clock.now                    = 150;
+    const olga_spin_result_t out = olga_spin(&sched);
+    EXPECT_EQ(out.next_deadline, INT64_MAX);
+    EXPECT_EQ(out.worst_lateness, 50);
+    EXPECT_EQ(out.now, 150);
+    EXPECT_EQ(log.ids, (std::vector<int>{ 1 }));
+    EXPECT_EQ(log.times, (std::vector<int64_t>{ 150 }));
+}
+
+TEST(OlgaSchedulerC, MultipleReschedules)
+{
+    TestClock clock{ .now = 0 };
+    olga_t    sched;
+    olga_init(&sched, &clock, clock_now);
+
+    CallLog     log{};
+    CallbackCtx ctx{ .log = &log, .id = 1, .expected_deadline = INT64_MIN, .clock = &clock, .advance_by = 0 };
+
+    olga_event_t evt = OLGA_EVENT_INIT;
+
+    // Schedule, reschedule multiple times
+    olga_defer(&sched, 100, &ctx, record_handler, &evt);
+    olga_defer(&sched, 200, &ctx, record_handler, &evt);
+    olga_defer(&sched, 150, &ctx, record_handler, &evt);
+    olga_defer(&sched, 300, &ctx, record_handler, &evt);
+
+    // Spin at 350 - event should fire once at 300
+    clock.now                    = 350;
+    const olga_spin_result_t out = olga_spin(&sched);
+    EXPECT_EQ(out.next_deadline, INT64_MAX);
+    EXPECT_EQ(out.worst_lateness, 50);
+    EXPECT_EQ(out.now, 350);
+    EXPECT_EQ(log.ids, (std::vector<int>{ 1 })); // Fired once
+    EXPECT_EQ(log.times, (std::vector<int64_t>{ 350 }));
+}
+
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
