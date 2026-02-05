@@ -16,6 +16,7 @@
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "olga_scheduler.hpp"
+#include "olga_scheduler.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -75,6 +76,15 @@ class SteadyClockMock final
 } // namespace
 
 namespace olga_scheduler::verification {
+
+TEST(TestOlgaScheduler, OlgaEventInitCpp)
+{
+    const olga_event_t event = OLGA_EVENT_INIT;
+    EXPECT_EQ(event.deadline, 0);
+    EXPECT_EQ(event.seqno, 0U);
+    EXPECT_EQ(event.user, nullptr);
+    EXPECT_EQ(event.handler, nullptr);
+}
 
 TEST(TestOlgaScheduler, EventLoopBasic)
 {

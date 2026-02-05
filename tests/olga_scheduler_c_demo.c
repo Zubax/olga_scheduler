@@ -23,7 +23,7 @@ int main(void)
     olga_t    sched;
     olga_init(&sched, &clock, demo_now);
 
-    olga_event_t event = { 0 };
+    olga_event_t event = OLGA_EVENT_INIT;
     olga_defer(&sched, 10, NULL, demo_handler, &event);
 
     const olga_spin_result_t out = olga_spin(&sched);

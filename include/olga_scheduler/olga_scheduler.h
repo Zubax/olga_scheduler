@@ -45,7 +45,12 @@ typedef struct olga_event_t
 } olga_event_t;
 
 // Convenience initializer for a fresh event (all fields zeroed, base pointers NULL).
-#define OLGA_EVENT_INIT ((olga_event_t){ { NULL } })
+#ifdef __cplusplus
+#define OLGA_EVENT_INIT \
+    olga_event_t {}
+#else
+#define OLGA_EVENT_INIT ((olga_event_t){ 0 })
+#endif
 
 /// The main scheduler type.
 typedef struct olga_t

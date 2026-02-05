@@ -112,10 +112,10 @@ TEST(OlgaSchedulerC, BasicOrdering)
     CallbackCtx ctx_c{ .log = &log, .id = 3, .expected_deadline = 12'000, .clock = &clock, .advance_by = 0 };
     CallbackCtx ctx_d{ .log = &log, .id = 4, .expected_deadline = 12'000, .clock = &clock, .advance_by = 0 };
 
-    olga_event_t evt_a{};
-    olga_event_t evt_b{};
-    olga_event_t evt_c{};
-    olga_event_t evt_d{};
+    olga_event_t evt_a = OLGA_EVENT_INIT;
+    olga_event_t evt_b = OLGA_EVENT_INIT;
+    olga_event_t evt_c = OLGA_EVENT_INIT;
+    olga_event_t evt_d = OLGA_EVENT_INIT;
 
     olga_defer(&sched, ctx_a.expected_deadline, &ctx_a, record_handler, &evt_a);
     olga_defer(&sched, ctx_b.expected_deadline, &ctx_b, record_handler, &evt_b);
@@ -158,9 +158,9 @@ TEST(OlgaSchedulerC, FifoSameDeadline)
     CallbackCtx ctx_b{ .log = &log, .id = 2, .expected_deadline = 1'000, .clock = &clock, .advance_by = 0 };
     CallbackCtx ctx_c{ .log = &log, .id = 3, .expected_deadline = 1'000, .clock = &clock, .advance_by = 0 };
 
-    olga_event_t evt_a{};
-    olga_event_t evt_b{};
-    olga_event_t evt_c{};
+    olga_event_t evt_a = OLGA_EVENT_INIT;
+    olga_event_t evt_b = OLGA_EVENT_INIT;
+    olga_event_t evt_c = OLGA_EVENT_INIT;
 
     olga_defer(&sched, ctx_a.expected_deadline, &ctx_a, record_handler, &evt_a);
     olga_defer(&sched, ctx_b.expected_deadline, &ctx_b, record_handler, &evt_b);
@@ -184,8 +184,8 @@ TEST(OlgaSchedulerC, Cancel)
     CallbackCtx ctx_a{ .log = &log, .id = 1, .expected_deadline = 100, .clock = &clock, .advance_by = 0 };
     CallbackCtx ctx_b{ .log = &log, .id = 2, .expected_deadline = 200, .clock = &clock, .advance_by = 0 };
 
-    olga_event_t evt_a{};
-    olga_event_t evt_b{};
+    olga_event_t evt_a = OLGA_EVENT_INIT;
+    olga_event_t evt_b = OLGA_EVENT_INIT;
 
     olga_defer(&sched, ctx_a.expected_deadline, &ctx_a, record_handler, &evt_a);
     olga_defer(&sched, ctx_b.expected_deadline, &ctx_b, record_handler, &evt_b);
@@ -208,7 +208,7 @@ TEST(OlgaSchedulerC, OverdueSingle)
 
     CallLog      log{};
     CallbackCtx  ctx{ .log = &log, .id = 1, .expected_deadline = 1'000, .clock = &clock, .advance_by = 0 };
-    olga_event_t evt{};
+    olga_event_t evt = OLGA_EVENT_INIT;
 
     olga_defer(&sched, ctx.expected_deadline, &ctx, record_handler, &evt);
 
@@ -231,8 +231,8 @@ TEST(OlgaSchedulerC, LongRunningCallback)
     CallbackCtx ctx_a{ .log = &log, .id = 1, .expected_deadline = 0, .clock = &clock, .advance_by = 100 };
     CallbackCtx ctx_b{ .log = &log, .id = 2, .expected_deadline = 20, .clock = &clock, .advance_by = 0 };
 
-    olga_event_t evt_a{};
-    olga_event_t evt_b{};
+    olga_event_t evt_a = OLGA_EVENT_INIT;
+    olga_event_t evt_b = OLGA_EVENT_INIT;
 
     olga_defer(&sched, ctx_a.expected_deadline, &ctx_a, record_handler, &evt_a);
     olga_defer(&sched, ctx_b.expected_deadline, &ctx_b, record_handler, &evt_b);
