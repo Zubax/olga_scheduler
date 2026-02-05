@@ -21,7 +21,7 @@ To release a new version, simply create a new tag.
 
 ## Examples
 
-### C99
+### C
 
 ```c
 #include "olga_scheduler.h"
@@ -54,7 +54,7 @@ int main(void)
     olga_init(&sched, NULL, get_microseconds);
 
     uint64_t     counter = 0;
-    olga_event_t event     = OLGA_EVENT_INIT;
+    olga_event_t event   = OLGA_EVENT_INIT;
     olga_defer(&sched, sched.now(&sched) + 1000000, &counter, handler, &event);
 
     for (;;) {
@@ -67,6 +67,41 @@ int main(void)
             puts("Event canceled");
             break;
         }
+    }
+    return 0;
+}
+```
+
+### C++
+
+```cpp
+#include "olga_scheduler.hpp"
+
+#include <chrono>
+#include <cstdint>
+#include <iostream>
+#include <thread>
+
+int main()
+{
+    using namespace std::chrono_literals;
+
+    olga_scheduler::EventLoop<std::chrono::steady_clock> loop;
+    std::uint64_t counter = 0;
+
+    auto evt = loop.repeat(1s, [&](const auto& arg) {
+        ++counter;
+        std::cout << "counter=" << counter
+                  << " now=" << arg.approx_now.time_since_epoch().count()
+                  << '\n';
+        if (counter > 10) {
+            arg.event.cancel();
+        }
+    });
+
+    while (!loop.isEmpty()) {
+        (void)loop.spin();
+        std::this_thread::sleep_for(1ms); // Do something else here.
     }
     return 0;
 }

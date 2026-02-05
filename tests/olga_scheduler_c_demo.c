@@ -30,7 +30,7 @@ int main(void)
     olga_init(&sched, NULL, get_microseconds);
 
     uint64_t     counter = 0;
-    olga_event_t event     = OLGA_EVENT_INIT;
+    olga_event_t event   = OLGA_EVENT_INIT;
     olga_defer(&sched, sched.now(&sched) + 1000000, &counter, handler, &event);
 
     for (;;) {
