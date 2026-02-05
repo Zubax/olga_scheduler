@@ -59,6 +59,7 @@ void record_handler(olga_t* const sched, olga_event_t* const event, const int64_
         ctx->log->times.push_back(now);
     }
     if (ctx->expected_deadline != INT64_MIN) {
+        EXPECT_EQ(event->deadline, ctx->expected_deadline);
         EXPECT_GE(now, ctx->expected_deadline);
     }
     if ((ctx->advance_by != 0) && (ctx->clock != nullptr)) {
@@ -220,6 +221,7 @@ TEST(OlgaSchedulerC, OverdueSingle)
     EXPECT_EQ(out.now, 1'030);
     EXPECT_EQ(log.ids, (std::vector<int>{ 1 }));
     EXPECT_EQ(log.times, (std::vector<int64_t>{ 1'030 }));
+    EXPECT_EQ(evt.deadline, ctx.expected_deadline);
 }
 
 TEST(OlgaSchedulerC, LongRunningCallback)

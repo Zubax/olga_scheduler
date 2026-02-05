@@ -29,6 +29,7 @@ To release a new version, simply create a new tag.
 #include <inttypes.h>
 #include <stdio.h>
 #include <time.h>
+#include <unistd.h>
 
 static int64_t get_microseconds(olga_t* sched)
 {
@@ -53,13 +54,19 @@ int main(void)
     olga_init(&sched, NULL, get_microseconds);
 
     uint64_t     counter = 0;
-    olga_event_t evt     = OLGA_EVENT_INIT;
-    olga_defer(&sched, get_microseconds(&sched) + 1000000, &counter, handler, &evt);
+    olga_event_t event     = OLGA_EVENT_INIT;
+    olga_defer(&sched, sched.now(&sched) + 1000000, &counter, handler, &event);
 
     for (;;) {
         olga_spin_result_t spin_result = olga_spin(&sched);
-        (void) spin_result;  // Optional performance information here.
-        usleep(1000);        // Do something else here: IO multiplexing, update scheduler stats, etc.
+        (void)spin_result; // Optional performance information here.
+        const struct timespec delay = { .tv_sec = 0, .tv_nsec = 1000 * 1000 };
+        (void)nanosleep(&delay, NULL); // Do something else here: IO multiplexing, update scheduler stats, etc.
+        if (counter > 10) {
+            olga_cancel(&sched, &event);
+            puts("Event canceled");
+            break;
+        }
     }
     return 0;
 }

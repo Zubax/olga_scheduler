@@ -156,7 +156,6 @@ static inline olga_spin_result_t olga_spin(olga_t* const self)
             break;
         }
         cavl2_remove(&self->events, &event->base);
-        event->deadline = INT64_MIN;
         event->handler(self, event, out.now);
 
         const int64_t lateness = out.now - deadline; // Non-negative because now >= deadline.
