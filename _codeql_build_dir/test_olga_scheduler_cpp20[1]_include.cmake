@@ -1,5 +1,0 @@
-if(EXISTS "/home/runner/work/olga_scheduler/olga_scheduler/_codeql_build_dir/test_olga_scheduler_cpp20[1]_tests.cmake")
-  include("/home/runner/work/olga_scheduler/olga_scheduler/_codeql_build_dir/test_olga_scheduler_cpp20[1]_tests.cmake")
-else()
-  add_test(test_olga_scheduler_cpp20_NOT_BUILT test_olga_scheduler_cpp20_NOT_BUILT)
-endif()

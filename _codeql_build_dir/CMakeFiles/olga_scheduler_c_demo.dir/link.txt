@@ -1,1 +1,0 @@
-/home/runner/work/olga_scheduler/.codeql-scratch/dbs/cpp/working/autobuild/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/olga_scheduler_c_demo.dir/link.d CMakeFiles/olga_scheduler_c_demo.dir/tests/olga_scheduler_c_demo.c.o -o olga_scheduler_c_demo
