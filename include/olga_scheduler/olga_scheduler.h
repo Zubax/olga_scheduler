@@ -31,18 +31,21 @@ extern "C"
 {
 #endif
 
+typedef struct olga_t       olga_t;
+typedef struct olga_event_t olga_event_t;
+
 /// Represents a user-handled future event.
 /// When the handler is invoked, the event is already removed from the scheduler.
 /// If necessary, it can be re-inserted immediately from within the handler with a new deadline.
 /// The time units can be arbitrary.
-typedef struct olga_event_t
+struct olga_event_t
 {
     CAVL2_T  base;
     int64_t  deadline;
     uint64_t seqno;
     void*    user;
-    void (*handler)(void* user, int64_t now);
-} olga_event_t;
+    void (*handler)(olga_t*, olga_event_t*, int64_t now);
+};
 
 // Convenience initializer for a fresh event (all fields zeroed, base pointers NULL).
 #ifdef __cplusplus
@@ -53,13 +56,13 @@ typedef struct olga_event_t
 #endif
 
 /// The main scheduler type.
-typedef struct olga_t
+struct olga_t
 {
     CAVL2_T* events;
     uint64_t next_seqno; ///< Monotonic sequence number for FIFO ordering of equal-deadline events.
     void*    user;
-    int64_t (*now)(void* user);
-} olga_t;
+    int64_t (*now)(olga_t* sched); ///< Time provider; receives the scheduler to access user data if needed.
+};
 
 /// Current state assessment returned from olga_spin().
 /// The `now` field contains the last sampled time from the user-provided clock, or INT64_MIN if not sampled.
@@ -72,7 +75,7 @@ typedef struct olga_spin_result_t
 
 /// To deinitialize, simply cancel all events; nothing else needs to be done.
 /// The time units can be arbitrary.
-static inline void olga_init(olga_t* const self, void* const user, int64_t (*const now)(void* user))
+static inline void olga_init(olga_t* const self, void* const user, int64_t (*const now)(olga_t* sched))
 {
     assert(self != NULL);
     assert(now != NULL);
@@ -98,6 +101,8 @@ static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_
 
 /// Schedule a one-time event.
 /// The handler will be invoked at or asap after the deadline; the actual invocation time will be provided.
+/// The scheduler pointer is passed to allow rescheduling from within the callback.
+/// The event pointer provides access to the user data and deadline.
 /// If the event is already scheduled, it will be automatically rescheduled with the new deadline.
 /// The event must be either zero-initialized using OLGA_EVENT_INIT or have been used at least once.
 /// Events are already canceled prior to handler invocation, so it is safe to re-register immediately from the handler.
@@ -105,7 +110,7 @@ static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_
 static inline void olga_defer(olga_t* const self,
                               const int64_t deadline,
                               void* const   user,
-                              void (*const handler)(void* user, int64_t now),
+                              void (*const handler)(olga_t* sched, olga_event_t* event, int64_t now),
                               olga_event_t* const out_event)
 {
     assert(self != NULL);
@@ -145,14 +150,14 @@ static inline olga_spin_result_t olga_spin(olga_t* const self)
             break;
         }
         const int64_t deadline = event->deadline;
-        out.now                = self->now(self->user);
+        out.now                = self->now(self);
         if (out.now < deadline) {
             out.next_deadline = deadline;
             break;
         }
         cavl2_remove(&self->events, &event->base);
         event->deadline = INT64_MIN;
-        event->handler(event->user, out.now);
+        event->handler(self, event, out.now);
 
         const int64_t lateness = out.now - deadline; // Non-negative because now >= deadline.
         if (lateness > out.worst_lateness) {

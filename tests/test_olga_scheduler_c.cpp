@@ -31,7 +31,7 @@ struct TestClock final
     int64_t now;
 };
 
-int64_t clock_now(void* const user) { return static_cast<TestClock*>(user)->now; }
+int64_t clock_now(olga_t* const sched) { return static_cast<TestClock*>(sched->user)->now; }
 
 void clock_advance(TestClock* const clock, const int64_t delta) { clock->now += delta; }
 
@@ -50,9 +50,10 @@ struct CallbackCtx final
     int64_t    advance_by;
 };
 
-void record_handler(void* const user, const int64_t now)
+void record_handler(olga_t* const sched, olga_event_t* const event, const int64_t now)
 {
-    auto* const ctx = static_cast<CallbackCtx*>(user);
+    (void)sched;
+    auto* const ctx = static_cast<CallbackCtx*>(event->user);
     if (ctx->log != nullptr) {
         ctx->log->ids.push_back(ctx->id);
         ctx->log->times.push_back(now);

@@ -9,11 +9,12 @@ typedef struct
     int64_t now;
 } DemoClock;
 
-static int64_t demo_now(void* const user) { return ((DemoClock*)user)->now; }
+static int64_t demo_now(olga_t* const sched) { return ((DemoClock*)sched->user)->now; }
 
-static void demo_handler(void* const user, const int64_t now)
+static void demo_handler(olga_t* const sched, olga_event_t* const event, const int64_t now)
 {
-    (void)user;
+    (void)sched;
+    (void)event;
     (void)now;
 }
 
