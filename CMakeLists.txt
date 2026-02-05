@@ -59,3 +59,19 @@ target_link_libraries(test_olga_scheduler_cpp20
 
 include(GoogleTest)
 gtest_discover_tests(test_olga_scheduler_cpp20)
+
+add_executable(test_olga_scheduler_capi ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olga_scheduler_c.cpp)
+set_target_properties(test_olga_scheduler_capi PROPERTIES CXX_STANDARD 20)
+target_include_directories(test_olga_scheduler_capi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(test_olga_scheduler_capi SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_link_libraries(test_olga_scheduler_capi
+        PRIVATE
+        GTest::gmock_main
+)
+gtest_discover_tests(test_olga_scheduler_capi)
+
+add_executable(olga_scheduler_c_demo ${CMAKE_CURRENT_SOURCE_DIR}/tests/olga_scheduler_c_demo.c)
+set_target_properties(olga_scheduler_c_demo PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(olga_scheduler_c_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(olga_scheduler_c_demo SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_compile_options(olga_scheduler_c_demo PRIVATE -Wall -Wextra -Werror -pedantic)
