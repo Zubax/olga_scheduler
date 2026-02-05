@@ -290,7 +290,7 @@ TEST(OlgaSchedulerC, RescheduleAlreadyScheduled)
     olga_defer(&sched, 300, &ctx_a, record_handler, &evt_a);
 
     // Now spin at time 250 - only B should fire (at 200)
-    clock.now = 250;
+    clock.now              = 250;
     olga_spin_result_t out = olga_spin(&sched);
     EXPECT_EQ(out.next_deadline, 300); // A is rescheduled to 300
     EXPECT_EQ(out.worst_lateness, 50);
