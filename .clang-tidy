@@ -20,6 +20,7 @@ Checks: >-
   -llvm-header-guard,
   -modernize-concat-nested-namespaces,
   -modernize-type-traits,
+  -modernize-use-auto,
   -modernize-use-constraints,
   -modernize-use-default-member-init,
   -modernize-use-nodiscard,
@@ -30,6 +31,7 @@ Checks: >-
   -bugprone-suspicious-include,
   -misc-include-cleaner,
   -cppcoreguidelines-pro-type-vararg,
+  -hicpp-use-auto,
   -hicpp-vararg,
 CheckOptions:
   - key:   readability-function-cognitive-complexity.Threshold
