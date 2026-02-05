@@ -79,6 +79,26 @@ TEST(OlgaSchedulerC, EmptySpin)
     EXPECT_EQ(out.now, INT64_MIN);
 }
 
+TEST(OlgaSchedulerC, ComparatorOrdering)
+{
+    olga_event_t a{};
+    olga_event_t b{};
+
+    a.deadline = 10;
+    a.seqno    = 1;
+    b.deadline = 20;
+    b.seqno    = 0;
+    EXPECT_LT(olga_private_compare(&a, &b.base), 0);
+    EXPECT_GT(olga_private_compare(&b, &a.base), 0);
+
+    b.deadline = 10;
+    b.seqno    = 2;
+    EXPECT_LT(olga_private_compare(&a, &b.base), 0);
+
+    b.seqno = 1;
+    EXPECT_EQ(olga_private_compare(&a, &b.base), 0);
+}
+
 TEST(OlgaSchedulerC, BasicOrdering)
 {
     TestClock clock{ .now = 10'000 };
@@ -223,6 +243,30 @@ TEST(OlgaSchedulerC, LongRunningCallback)
     EXPECT_EQ(out.now, 100);
     EXPECT_EQ(log.ids, (std::vector<int>{ 1, 2 }));
     EXPECT_EQ(log.times, (std::vector<int64_t>{ 0, 100 }));
+}
+
+TEST(OlgaSchedulerC, WorstLatenessKeepsMax)
+{
+    TestClock clock{ .now = 100 };
+    olga_t    sched;
+    olga_init(&sched, &clock, clock_now);
+
+    CallLog     log{};
+    CallbackCtx ctx_a{ .log = &log, .id = 1, .expected_deadline = 0, .clock = &clock, .advance_by = 0 };
+    CallbackCtx ctx_b{ .log = &log, .id = 2, .expected_deadline = 60, .clock = &clock, .advance_by = 0 };
+
+    olga_event_t evt_a{};
+    olga_event_t evt_b{};
+
+    olga_defer(&sched, ctx_a.expected_deadline, &ctx_a, record_handler, &evt_a);
+    olga_defer(&sched, ctx_b.expected_deadline, &ctx_b, record_handler, &evt_b);
+
+    const olga_spin_result_t out = olga_spin(&sched);
+    EXPECT_EQ(out.next_deadline, INT64_MAX);
+    EXPECT_EQ(out.worst_lateness, 100);
+    EXPECT_EQ(out.now, 100);
+    EXPECT_EQ(log.ids, (std::vector<int>{ 1, 2 }));
+    EXPECT_EQ(log.times, (std::vector<int64_t>{ 100, 100 }));
 }
 
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)

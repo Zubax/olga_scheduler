@@ -48,6 +48,36 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wsign-conversion -Wcast-align -Wmissing
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wtype-limits -Wnon-virtual-dtor -Woverloaded-virtual")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 
+option(OLGA_ENABLE_COVERAGE "Enable coverage instrumentation and reporting" OFF)
+if (OLGA_ENABLE_COVERAGE)
+    # Coverage builds are optimized for instrumentation rather than static analysis.
+    set(CMAKE_CXX_CLANG_TIDY "")
+
+    if ((CMAKE_C_COMPILER_ID MATCHES "GNU|Clang") OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g --coverage -DNDEBUG")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g --coverage -DNDEBUG")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    else ()
+        message(WARNING "Coverage is enabled but the compiler may not support --coverage flags.")
+    endif ()
+
+    find_program(gcovr_path NAMES gcovr)
+    if (NOT gcovr_path)
+        message(FATAL_ERROR "gcovr not found; install it or set OLGA_ENABLE_COVERAGE=OFF.")
+    endif ()
+    add_custom_target(coverage
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            COMMAND ${gcovr_path}
+                    -r ${CMAKE_CURRENT_SOURCE_DIR}
+                    --filter ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler/olga_scheduler\\.h
+                    --exclude ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler/olga_scheduler\\.hpp
+                    --txt-metric branch
+                    --fail-under-line 100
+                    --fail-under-branch 100
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+endif ()
+
 add_executable(test_olga_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olga_scheduler.cpp)
 set_target_properties(test_olga_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
 target_include_directories(test_olga_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)

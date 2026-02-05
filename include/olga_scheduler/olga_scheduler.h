@@ -132,7 +132,7 @@ static inline olga_spin_result_t olga_spin(olga_t* const self)
 {
     assert(self != NULL);
     olga_spin_result_t out = { .next_deadline = INT64_MAX, .worst_lateness = 0, .now = INT64_MIN };
-    for (;;) {
+    for (;;) { // GCOVR_EXCL_LINE
         olga_event_t* const event = (olga_event_t*)cavl2_min(self->events);
         if (event == NULL) {
             out.next_deadline = INT64_MAX;
