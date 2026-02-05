@@ -136,6 +136,14 @@ static inline void olga_cancel(olga_t* const self, olga_event_t* const event)
     event->deadline = INT64_MIN;
 }
 
+/// True if the event is currently pending in the scheduler.
+static inline bool olga_is_pending(const olga_t* const self, const olga_event_t* const event)
+{
+    assert(self != NULL);
+    assert(event != NULL);
+    return cavl2_is_inserted(self->events, &event->base);
+}
+
 /// Execute pending events strictly in the order of their deadlines until there are no pending events left.
 /// Events with the same deadline are executed in the FIFO order.
 /// The handler receives a freshly sampled `now` taken immediately before invocation.

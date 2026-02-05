@@ -202,6 +202,31 @@ TEST(OlgaSchedulerC, Cancel)
     EXPECT_EQ(log.ids, (std::vector<int>{ 2 }));
 }
 
+TEST(OlgaSchedulerC, IsPending)
+{
+    TestClock clock{ .now = 0 };
+    olga_t    sched;
+    olga_init(&sched, &clock, clock_now);
+
+    CallbackCtx  ctx{ .log = nullptr, .id = 0, .expected_deadline = INT64_MIN, .clock = &clock, .advance_by = 0 };
+    olga_event_t evt = OLGA_EVENT_INIT;
+
+    EXPECT_FALSE(olga_is_pending(&sched, &evt));
+
+    olga_defer(&sched, 100, &ctx, record_handler, &evt);
+    EXPECT_TRUE(olga_is_pending(&sched, &evt));
+
+    olga_cancel(&sched, &evt);
+    EXPECT_FALSE(olga_is_pending(&sched, &evt));
+
+    olga_defer(&sched, 100, &ctx, record_handler, &evt);
+    EXPECT_TRUE(olga_is_pending(&sched, &evt));
+
+    clock.now = 100;
+    (void)olga_spin(&sched);
+    EXPECT_FALSE(olga_is_pending(&sched, &evt));
+}
+
 TEST(OlgaSchedulerC, OverdueSingle)
 {
     TestClock clock{ .now = 0 };
