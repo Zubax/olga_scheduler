@@ -43,8 +43,8 @@ struct olga_event_t
     CAVL2_T  base;
     int64_t  deadline;
     uint64_t seqno;
-    void*    user;
     void (*handler)(olga_t*, olga_event_t*, int64_t now);
+    void* user;
 };
 
 // Convenience initializer for a fresh event (all fields zeroed, base pointers NULL).
@@ -59,9 +59,9 @@ struct olga_event_t
 struct olga_t
 {
     CAVL2_T* events;
-    uint64_t next_seqno; ///< Monotonic sequence number for FIFO ordering of equal-deadline events.
-    void*    user;
-    int64_t (*now)(olga_t* sched); ///< Time provider; receives the scheduler to access user data if needed.
+    uint64_t next_seqno;     ///< Monotonic sequence number for FIFO ordering of equal-deadline events.
+    int64_t (*now)(olga_t*); ///< Time provider; receives the scheduler to access user data if needed.
+    void* user;
 };
 
 /// Current state assessment returned from olga_spin().
@@ -81,8 +81,8 @@ static inline void olga_init(olga_t* const self, void* const user, int64_t (*con
     assert(now != NULL);
     self->events     = NULL;
     self->next_seqno = 0U;
-    self->user       = user;
     self->now        = now;
+    self->user       = user;
 }
 
 // INTERNAL USE ONLY.
@@ -119,8 +119,8 @@ static inline void olga_defer(olga_t* const self,
     (void)cavl2_remove_if(&self->events, &out_event->base);
     out_event->deadline = deadline;
     out_event->seqno    = self->next_seqno++;
-    out_event->user     = user;
     out_event->handler  = handler;
+    out_event->user     = user;
     (void)cavl2_find_or_insert(&self->events, out_event, olga_private_compare, out_event, cavl2_trivial_factory);
 }
 
