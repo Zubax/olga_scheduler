@@ -1,4 +1,3 @@
-Language: Cpp
 BasedOnStyle: Mozilla
 IndentWidth: 4
 ColumnLimit: 120
@@ -13,6 +12,6 @@ AlignConsecutiveBitFields: true
 AlignConsecutiveDeclarations: true
 AlignConsecutiveMacros: true
 AlignConsecutiveShortCaseStatements: { Enabled: true }
-AlignEscapedNewlines: LeftWithLastLine
+AlignEscapedNewlines: Left
 AlignTrailingComments: true
 SortIncludes: false
