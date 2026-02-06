@@ -22,7 +22,8 @@ if (NOT clang_format)
     message(STATUS "Could not locate clang-format")
 else ()
     file(GLOB format_files
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/*.[ch]pp
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/*/*.h*
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.[ch]*
     )
     message(STATUS "Using clang-format: ${clang_format}; files: ${format_files}")
     add_custom_target(format COMMAND ${clang_format} -i -fallback-style=none -style=file --verbose ${format_files})
@@ -47,6 +48,36 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wsign-conversion -Wcast-align -Wmissing
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wtype-limits -Wnon-virtual-dtor -Woverloaded-virtual")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-attributes")
 
+option(OLGA_ENABLE_COVERAGE "Enable coverage instrumentation and reporting" OFF)
+if (OLGA_ENABLE_COVERAGE)
+    # Coverage builds are optimized for instrumentation rather than static analysis.
+    set(CMAKE_CXX_CLANG_TIDY "")
+
+    if ((CMAKE_C_COMPILER_ID MATCHES "GNU|Clang") OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g --coverage -DNDEBUG")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g --coverage -DNDEBUG")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    else ()
+        message(WARNING "Coverage is enabled but the compiler may not support --coverage flags.")
+    endif ()
+
+    find_program(gcovr_path NAMES gcovr)
+    if (NOT gcovr_path)
+        message(FATAL_ERROR "gcovr not found; install it or set OLGA_ENABLE_COVERAGE=OFF.")
+    endif ()
+    add_custom_target(coverage
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            COMMAND ${gcovr_path}
+                    -r ${CMAKE_CURRENT_SOURCE_DIR}
+                    --filter ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler/olga_scheduler\\.h
+                    --exclude ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler/olga_scheduler\\.hpp
+                    --txt-metric branch
+                    --fail-under-line 100
+                    --fail-under-branch 100
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+endif ()
+
 add_executable(test_olga_scheduler_cpp20 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olga_scheduler.cpp)
 set_target_properties(test_olga_scheduler_cpp20 PROPERTIES CXX_STANDARD 20)
 target_include_directories(test_olga_scheduler_cpp20 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
@@ -58,3 +89,19 @@ target_link_libraries(test_olga_scheduler_cpp20
 
 include(GoogleTest)
 gtest_discover_tests(test_olga_scheduler_cpp20)
+
+add_executable(test_olga_scheduler_capi ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_olga_scheduler_c.cpp)
+set_target_properties(test_olga_scheduler_capi PROPERTIES CXX_STANDARD 20)
+target_include_directories(test_olga_scheduler_capi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(test_olga_scheduler_capi SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_link_libraries(test_olga_scheduler_capi
+        PRIVATE
+        GTest::gmock_main
+)
+gtest_discover_tests(test_olga_scheduler_capi)
+
+add_executable(olga_scheduler_c_demo ${CMAKE_CURRENT_SOURCE_DIR}/tests/olga_scheduler_c_demo.c)
+set_target_properties(olga_scheduler_c_demo PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(olga_scheduler_c_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(olga_scheduler_c_demo SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_compile_options(olga_scheduler_c_demo PRIVATE -Wall -Wextra -Werror -pedantic)
