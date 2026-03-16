@@ -398,8 +398,8 @@ TEST(OlgaSchedulerC, HandlerTypedef)
     olga_t    sched;
     olga_init(&sched, &clock, clock_now);
 
-    CallLog     log{};
-    CallbackCtx ctx{ .log = &log, .id = 1, .expected_deadline = 100, .clock = &clock, .advance_by = 0 };
+    CallLog      log{};
+    CallbackCtx  ctx{ .log = &log, .id = 1, .expected_deadline = 100, .clock = &clock, .advance_by = 0 };
     olga_event_t evt = OLGA_EVENT_INIT;
 
     const olga_handler_t handler = record_handler;
