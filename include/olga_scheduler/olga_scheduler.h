@@ -33,6 +33,7 @@ extern "C"
 
 typedef struct olga_t       olga_t;
 typedef struct olga_event_t olga_event_t;
+typedef void (*olga_handler_t)(olga_t*, olga_event_t*, int64_t now);
 
 /// Represents a user-handled future event.
 /// When the handler is invoked, the event is already removed from the scheduler.
@@ -41,11 +42,11 @@ typedef struct olga_event_t olga_event_t;
 /// The time units can be arbitrary.
 struct olga_event_t
 {
-    CAVL2_T  base;
-    int64_t  deadline;
-    uint64_t seqno;
-    void (*handler)(olga_t*, olga_event_t*, int64_t now);
-    void* user;
+    CAVL2_T        base;
+    int64_t        deadline;
+    uint64_t       seqno;
+    olga_handler_t handler;
+    void*          user;
 };
 
 // Convenience initializer for a fresh event (all fields zeroed, base pointers NULL).
@@ -108,11 +109,11 @@ static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_
 /// The event must be either zero-initialized using OLGA_EVENT_INIT or have been used at least once.
 /// Events are already canceled prior to handler invocation, so it is safe to re-register immediately from the handler.
 /// The complexity is logarithmic in the number of pending events.
-static inline void olga_defer(olga_t* const self,
-                              const int64_t deadline,
-                              void* const   user,
-                              void (*const handler)(olga_t*, olga_event_t*, int64_t now),
-                              olga_event_t* const out_event)
+static inline void olga_defer(olga_t* const        self,
+                              const int64_t        deadline,
+                              void* const          user,
+                              const olga_handler_t handler,
+                              olga_event_t* const  out_event)
 {
     assert(self != NULL);
     assert(handler != NULL);
