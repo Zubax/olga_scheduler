@@ -33,6 +33,7 @@ extern "C"
 
 typedef struct olga_t       olga_t;
 typedef struct olga_event_t olga_event_t;
+typedef void (*olga_handler_t)(olga_t*, olga_event_t*, int64_t now);
 
 /// Represents a user-handled future event.
 /// When the handler is invoked, the event is already removed from the scheduler.
@@ -44,7 +45,7 @@ struct olga_event_t
     CAVL2_T  base;
     int64_t  deadline;
     uint64_t seqno;
-    void (*handler)(olga_t*, olga_event_t*, int64_t now);
+    olga_handler_t handler;
     void* user;
 };
 
@@ -111,7 +112,7 @@ static inline CAVL2_RELATION olga_private_compare(const void* user, const CAVL2_
 static inline void olga_defer(olga_t* const self,
                               const int64_t deadline,
                               void* const   user,
-                              void (*const handler)(olga_t*, olga_event_t*, int64_t now),
+                              const olga_handler_t handler,
                               olga_event_t* const out_event)
 {
     assert(self != NULL);

@@ -392,4 +392,26 @@ TEST(OlgaSchedulerC, MultipleReschedules)
     EXPECT_EQ(log.times, (std::vector<int64_t>{ 350 }));
 }
 
+TEST(OlgaSchedulerC, HandlerTypedef)
+{
+    TestClock clock{ .now = 0 };
+    olga_t    sched;
+    olga_init(&sched, &clock, clock_now);
+
+    CallLog     log{};
+    CallbackCtx ctx{ .log = &log, .id = 1, .expected_deadline = 100, .clock = &clock, .advance_by = 0 };
+    olga_event_t evt = OLGA_EVENT_INIT;
+
+    const olga_handler_t handler = record_handler;
+    olga_defer(&sched, 100, &ctx, handler, &evt);
+
+    clock.now                    = 100;
+    const olga_spin_result_t out = olga_spin(&sched);
+    EXPECT_EQ(out.next_deadline, INT64_MAX);
+    EXPECT_EQ(out.worst_lateness, 0);
+    EXPECT_EQ(out.now, 100);
+    EXPECT_EQ(log.ids, (std::vector<int>{ 1 }));
+    EXPECT_EQ(log.times, (std::vector<int64_t>{ 100 }));
+}
+
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
