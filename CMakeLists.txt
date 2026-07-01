@@ -131,7 +131,7 @@ add_custom_target(run_basic_example_cpp
   )
 
 add_custom_target(examples)
-add_dependencies(examples basic_example_c basic_example_cpp task_trace)
+add_dependencies(examples basic_example_c basic_example_cpp)
 add_test(NAME BuildExamples
          COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target examples
 )
