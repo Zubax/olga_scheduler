@@ -130,8 +130,19 @@ add_custom_target(run_basic_example_cpp
           USES_TERMINAL
   )
 
+add_executable(background_task ${CMAKE_CURRENT_SOURCE_DIR}/examples/background_task.cpp)
+set_target_properties(background_task PROPERTIES CXX_STANDARD 20)
+target_include_directories(background_task PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(background_task SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_compile_options(background_task PRIVATE -Wall -Wextra -Werror -pedantic)
+add_custom_target(run_background_task
+          COMMAND $<TARGET_FILE:background_task>
+          DEPENDS background_task
+          USES_TERMINAL
+  )
+
 add_custom_target(examples)
-add_dependencies(examples basic_example_c basic_example_cpp)
+add_dependencies(examples basic_example_c basic_example_cpp background_task)
 add_test(NAME BuildExamples
          COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target examples
 )
