@@ -42,6 +42,7 @@ __pycache__/
 .cproject
 .pydevproject
 .gdbinit
+.clangd
 .vscode/
 **/.idea/*
 !**/.idea/dictionaries
