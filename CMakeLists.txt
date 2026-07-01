@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.12)
 project(olga_scheduler_tests C CXX)
 enable_testing()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CTEST_OUTPUT_ON_FAILURE ON)
 
 # Use -DNO_STATIC_ANALYSIS=1 to suppress static analysis. If not suppressed, the tools used here shall be available.
@@ -105,3 +106,32 @@ set_target_properties(olga_scheduler_c_demo PROPERTIES C_STANDARD 99 C_STANDARD_
 target_include_directories(olga_scheduler_c_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
 target_include_directories(olga_scheduler_c_demo SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
 target_compile_options(olga_scheduler_c_demo PRIVATE -Wall -Wextra -Werror -pedantic)
+
+add_executable(basic_example_c ${CMAKE_CURRENT_SOURCE_DIR}/examples/basic_example.c)
+set_target_properties(basic_example_c PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(basic_example_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(basic_example_c SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_compile_definitions(basic_example_c PRIVATE _POSIX_C_SOURCE=200809L)
+target_compile_options(basic_example_c PRIVATE -Wall -Wextra -Werror -pedantic)
+add_custom_target(run_basic_example_c
+         COMMAND $<TARGET_FILE:basic_example_c>
+         DEPENDS basic_example_c
+         USES_TERMINAL
+ )
+
+add_executable(basic_example_cpp ${CMAKE_CURRENT_SOURCE_DIR}/examples/basic_example.cpp)
+set_target_properties(basic_example_cpp PROPERTIES CXX_STANDARD 20)
+target_include_directories(basic_example_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(basic_example_cpp SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_compile_options(basic_example_cpp PRIVATE -Wall -Wextra -Werror -pedantic)
+add_custom_target(run_basic_example_cpp
+          COMMAND $<TARGET_FILE:basic_example_cpp>
+          DEPENDS basic_example_cpp
+          USES_TERMINAL
+  )
+
+add_custom_target(examples)
+add_dependencies(examples basic_example_c basic_example_cpp task_trace)
+add_test(NAME BuildExamples
+         COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target examples
+)
