@@ -15,8 +15,8 @@
 /// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 /// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "olga_scheduler.hpp"
 #include "olga_scheduler.h"
+#include "olga_scheduler.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -348,6 +348,64 @@ TEST(TestOlgaScheduler, EventLoopDefer_long_running_callback)
     EXPECT_THAT(calls,
                 ElementsAre(std::make_tuple("a", 0ms, 0ms), //
                             std::make_tuple("b", 20ms, 100ms)));
+}
+
+TEST(TestOlgaScheduler, EventLoopTrace)
+{
+    using std::chrono_literals::operator""ms;
+    SteadyClockMock::reset();
+    EventLoop<SteadyClockMock, true, 2U> evl;
+
+    auto once = evl.defer("once", SteadyClockMock::now(), [](const auto&) { SteadyClockMock::advance(7ms); });
+
+    std::uint8_t repeat_count = 0;
+    auto         periodic     = evl.repeat("periodic", 10ms, [&](const auto& arg) {
+        ++repeat_count;
+        SteadyClockMock::advance((repeat_count == 1U) ? 3ms : 5ms);
+        if (repeat_count >= 2U) {
+            arg.event.cancel();
+        }
+    });
+
+    (void)evl.spin();
+    ASSERT_THAT(evl.getTrace().size(), 2U);
+    EXPECT_THAT(evl.getTrace()[0].name, "once");
+    EXPECT_THAT(evl.getTrace()[0].shortest_duration, 7ms);
+    EXPECT_THAT(evl.getTrace()[0].longest_duration, 7ms);
+    EXPECT_THAT(evl.getTrace()[0].average_duration, 7ms);
+    EXPECT_THAT(evl.getTrace()[0].total_duration, 7ms);
+    EXPECT_THAT(evl.getTrace()[0].execution_count, 1U);
+    EXPECT_THAT(evl.getTrace()[1].name, "periodic");
+    EXPECT_THAT(evl.getTrace()[1].shortest_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].longest_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].average_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].total_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].execution_count, 0U);
+
+    SteadyClockMock::advance(3ms);
+    (void)evl.spin();
+    SteadyClockMock::advance(7ms);
+    (void)evl.spin();
+
+    EXPECT_THAT(evl.getTrace()[1].shortest_duration, 3ms);
+    EXPECT_THAT(evl.getTrace()[1].longest_duration, 5ms);
+    EXPECT_THAT(evl.getTrace()[1].average_duration, 4ms);
+    EXPECT_THAT(evl.getTrace()[1].total_duration, 8ms);
+    EXPECT_THAT(evl.getTrace()[1].execution_count, 2U);
+
+    evl.resetTrace();
+    EXPECT_THAT(evl.getTrace()[0].name, "once");
+    EXPECT_THAT(evl.getTrace()[0].shortest_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[0].longest_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[0].average_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[0].total_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[0].execution_count, 0U);
+    EXPECT_THAT(evl.getTrace()[1].name, "periodic");
+    EXPECT_THAT(evl.getTrace()[1].shortest_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].longest_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].average_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].total_duration, 0ms);
+    EXPECT_THAT(evl.getTrace()[1].execution_count, 0U);
 }
 
 TEST(TestOlgaScheduler, HandleMovement)

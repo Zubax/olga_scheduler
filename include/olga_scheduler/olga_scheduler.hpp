@@ -19,10 +19,15 @@
 
 #include <cavl.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cassert>
-#include <chrono>
 #include <concepts>
-#include <optional>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <span>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -173,28 +178,175 @@ struct SpinResult final
     typename Clock::time_point approx_now;
 };
 
+/// Execution statistics for a single event. Only available when tracing is
+/// enabled via EventLoop<Clock, true, TraceRecordCapacity>.
+template <typename Clock>
+struct EventTrace final
+{
+    using duration = typename Clock::duration;
+
+    std::string_view name;
+    duration         shortest_duration{};
+    duration         longest_duration{};
+    duration         average_duration{};
+    duration         total_duration{};
+    std::uint32_t    execution_count{};
+};
+
+template <typename Clock, bool TracingEnabled, std::size_t TraceRecordCapacity>
+class EventTraceStorage
+{
+  protected:
+    using duration = typename Clock::duration;
+
+    EventTraceStorage() = default;
+
+    static constexpr std::size_t addTraceRecord(const std::string_view) noexcept
+    {
+        return std::numeric_limits<std::size_t>::max();
+    }
+    static constexpr void recordTrace(const std::size_t, const duration) noexcept {}
+};
+
+template <typename Clock, std::size_t TraceRecordCapacity>
+class EventTraceStorage<Clock, true, TraceRecordCapacity>
+{
+    static_assert(TraceRecordCapacity > 0U, "TraceRecordCapacity shall be specified when tracing is enabled.");
+
+  protected:
+    using duration = typename Clock::duration;
+
+    EventTraceStorage() = default;
+
+    std::size_t addTraceRecord(const std::string_view name) noexcept
+    {
+        assert(trace_record_count_ < trace_.size());
+        if (trace_record_count_ >= trace_.size()) [[unlikely]] {
+            return std::numeric_limits<std::size_t>::max();
+        }
+        const auto index = trace_record_count_;
+        trace_[index]    = EventTrace<Clock>{ .name = name };
+        trace_record_count_++;
+        return index;
+    }
+
+    void recordTrace(const std::size_t index, const duration elapsed) noexcept
+    {
+        assert(index < trace_record_count_);
+        if (index >= trace_record_count_) [[unlikely]] {
+            return;
+        }
+        auto& trace = trace_[index];
+
+        const auto normalized_elapsed = std::max(elapsed, duration::zero());
+        if (trace.execution_count == 0U) {
+            trace.shortest_duration = normalized_elapsed;
+            trace.longest_duration  = normalized_elapsed;
+        } else {
+            trace.shortest_duration = std::min(trace.shortest_duration, normalized_elapsed);
+            trace.longest_duration  = std::max(trace.longest_duration, normalized_elapsed);
+        }
+
+        trace.total_duration = saturatedAdd(trace.total_duration, normalized_elapsed);
+        if (trace.execution_count < std::numeric_limits<decltype(trace.execution_count)>::max()) {
+            trace.execution_count++;
+        }
+        trace.average_duration = averageDuration(trace.total_duration, trace.execution_count);
+    }
+
+    [[nodiscard]] std::span<const EventTrace<Clock>> getTraceRecords() const noexcept
+    {
+        if (trace_record_count_ == 0U) {
+            return {};
+        }
+        return { trace_.data(), trace_record_count_ };
+    }
+
+    void resetTraceRecords() noexcept
+    {
+        for (std::size_t index = 0U; index < trace_record_count_; ++index) {
+            auto& trace             = trace_[index];
+            trace.shortest_duration = duration::zero();
+            trace.longest_duration  = duration::zero();
+            trace.average_duration  = duration::zero();
+            trace.total_duration    = duration::zero();
+            trace.execution_count   = 0U;
+        }
+    }
+
+  private:
+    static constexpr duration saturatedAdd(const duration lhs, const duration rhs) noexcept
+    {
+        if (rhs <= duration::zero()) {
+            return lhs;
+        }
+        if (lhs > (duration::max() - rhs)) {
+            return duration::max();
+        }
+        return lhs + rhs;
+    }
+
+    static constexpr duration averageDuration(const duration total, const std::uint32_t count) noexcept
+    {
+        assert(count > 0U);
+        return total / static_cast<typename duration::rep>(count);
+    }
+
+    std::array<EventTrace<Clock>, TraceRecordCapacity> trace_;
+    std::size_t                                        trace_record_count_{};
+};
+
+template <bool Enabled>
+class EventTraceIndex
+{
+  public:
+    static constexpr void setTraceIndex(const std::size_t) noexcept {}
+
+    [[nodiscard]] static constexpr std::size_t getTraceIndex() noexcept
+    {
+        return std::numeric_limits<std::size_t>::max();
+    }
+};
+
+template <>
+class EventTraceIndex<true>
+{
+  public:
+    void setTraceIndex(const std::size_t index) noexcept { trace_index_ = index; }
+
+    [[nodiscard]] std::size_t getTraceIndex() const noexcept { return trace_index_; }
+
+  private:
+    std::size_t trace_index_ = std::numeric_limits<std::size_t>::max();
+};
+
 /// The event loop is used to execute activities at the specified time, either once or periodically.
 /// The event handler callbacks are invoked with one argument of type Arg<Clock::time_point>.
 /// The event loop shall outlive the events it manages.
 /// Each factory method returns an event object by value,
 /// which can be used to cancel the event by destroying it.
 /// The time complexity of all operations is logarithmic of the number of registered events.
-template <typename Clock>
-class EventLoop final
+template <typename Clock, bool TraceExecution = false, std::size_t TraceRecordCapacity = 0U>
+class EventLoop final : private EventTraceStorage<Clock, TraceExecution, TraceRecordCapacity>
 {
   public:
     using time_point = typename Clock::time_point;
     using duration   = typename Clock::duration;
+    using Trace      = EventTrace<Clock>;
 
   private:
     /// This proxy is needed to expose the protected execute() method to the event loop.
     /// An alternative would be to make this class a friend of the Event class,
     /// or to make the execute() method public, which is undesirable.
-    class EventProxy : public Event<time_point>
+    class EventProxy
+      : public Event<time_point>
+      , private EventTraceIndex<TraceExecution>
     {
       public:
         using Event<time_point>::execute;
         using Event<time_point>::_get_type_id_;
+        using EventTraceIndex<TraceExecution>::getTraceIndex;
+        using EventTraceIndex<TraceExecution>::setTraceIndex;
     };
 
   public:
@@ -217,13 +369,22 @@ class EventLoop final
     template <Callback<time_point> Fun>
     [[nodiscard]] auto repeat(const duration period, Fun&& handler)
     {
+        return repeat({}, period, std::forward<Fun>(handler));
+    }
+
+    /// Like repeat(), but with a trace name used when tracing is enabled via
+    /// EventLoop<Clock, true, TraceRecordCapacity>.
+    template <Callback<time_point> Fun>
+    [[nodiscard]] auto repeat(const std::string_view trace_name, const duration period, Fun&& handler)
+    {
         class Impl final : public EventProxy
         {
           public:
-            Impl(EventLoop& owner, const duration per, Fun&& fun)
+            Impl(EventLoop& owner, const std::string_view name, const duration per, Fun&& fun)
               : period_{ per }
               , handler_{ std::move(fun) }
             {
+                this->setTraceIndex(owner.addTraceRecord(name));
                 this->schedule(Clock::now() + period_, owner.tree_);
             }
 
@@ -240,7 +401,7 @@ class EventLoop final
             const Fun      handler_;
         };
         assert(period > duration::zero());
-        return Impl{ *this, period, std::forward<Fun>(handler) };
+        return Impl{ *this, trace_name, period, std::forward<Fun>(handler) };
     }
 
     /// This is like repeat() with one crucial difference: the next deadline is defined not as (deadline+period),
@@ -252,13 +413,22 @@ class EventLoop final
     template <Callback<time_point> Fun>
     [[nodiscard]] auto poll(const duration min_period, Fun&& handler)
     {
+        return poll({}, min_period, std::forward<Fun>(handler));
+    }
+
+    /// Like poll(), but with a trace name used when tracing is enabled via
+    /// EventLoop<Clock, true, TraceRecordCapacity>.
+    template <Callback<time_point> Fun>
+    [[nodiscard]] auto poll(const std::string_view trace_name, const duration min_period, Fun&& handler)
+    {
         class Impl final : public EventProxy
         {
           public:
-            Impl(EventLoop& owner, const duration per, Fun&& fun)
+            Impl(EventLoop& owner, const std::string_view name, const duration per, Fun&& fun)
               : min_period_{ per }
               , handler_{ std::move(fun) }
             {
+                this->setTraceIndex(owner.addTraceRecord(name));
                 this->schedule(Clock::now() + min_period_, owner.tree_);
             }
 
@@ -275,7 +445,7 @@ class EventLoop final
             const Fun      handler_;
         };
         assert(min_period > duration::zero());
-        return Impl{ *this, min_period, std::forward<Fun>(handler) };
+        return Impl{ *this, trace_name, min_period, std::forward<Fun>(handler) };
     }
 
     /// Like repeat() but the handler will be invoked only once and the event is canceled afterward.
@@ -283,12 +453,21 @@ class EventLoop final
     template <Callback<time_point> Fun>
     [[nodiscard]] auto defer(const time_point deadline, Fun&& handler)
     {
+        return defer({}, deadline, std::forward<Fun>(handler));
+    }
+
+    /// Like defer(), but with a trace name used when tracing is enabled via
+    /// EventLoop<Clock, true, TraceRecordCapacity>.
+    template <Callback<time_point> Fun>
+    [[nodiscard]] auto defer(const std::string_view trace_name, const time_point deadline, Fun&& handler)
+    {
         class Impl final : public EventProxy
         {
           public:
-            Impl(EventLoop& owner, const time_point deadline, Fun&& fun)
+            Impl(EventLoop& owner, const std::string_view name, const time_point deadline, Fun&& fun)
               : handler_{ std::move(fun) }
             {
+                this->setTraceIndex(owner.addTraceRecord(name));
                 this->schedule(deadline, owner.tree_);
             }
 
@@ -303,7 +482,7 @@ class EventLoop final
 
             const Fun handler_;
         };
-        return Impl{ *this, deadline, std::forward<Fun>(handler) };
+        return Impl{ *this, trace_name, deadline, std::forward<Fun>(handler) };
     }
 
     /// Execute pending events strictly in the order of their deadlines until there are no pending events left.
@@ -337,12 +516,15 @@ class EventLoop final
             }
             {
                 ExecutionMonitor monitor{}; // RAII indication of the start and end of the event execution.
-                // Execution will remove the event from the tree and then possibly re-insert it with a new deadline.
-                evt->execute({ .event = *evt, .deadline = deadline, .approx_now = result.approx_now }, tree_);
+                // Execution will remove the event from the tree and then possibly re-insert it with a new deadline..
+                const auto execution_started_at = traceStart(result.approx_now);
+                const auto trace_index          = evt->getTraceIndex();
+                evt->execute({ .event = *evt, .deadline = deadline, .approx_now = execution_started_at }, tree_);
+                result.worst_lateness = std::max(result.worst_lateness, execution_started_at - deadline);
+                traceStop(trace_index, execution_started_at, result.approx_now);
                 (void)monitor;
             }
-            result.next_deadline  = time_point::max(); // Reset the next deadline to the maximum possible value.
-            result.worst_lateness = std::max(result.worst_lateness, result.approx_now - deadline);
+            result.next_deadline = time_point::max(); // Reset the next deadline to the maximum possible value.
         }
 
         assert(result.approx_now > time_point::min());
@@ -353,12 +535,44 @@ class EventLoop final
     /// True if there are no registered events.
     [[nodiscard]] bool isEmpty() const noexcept { return tree_.empty(); }
 
+    /// Execution trace records for events created by this loop. Only available
+    /// when tracing is enabled.
+    [[nodiscard]] std::span<const Trace> getTrace() const noexcept
+        requires TraceExecution
+    {
+        return this->getTraceRecords();
+    }
+
+    /// Reset accumulated event execution statistics. Event names are preserved.
+    void resetTrace() noexcept
+        requires TraceExecution
+    {
+        this->resetTraceRecords();
+    }
+
     /// This intrusive accessor is only needed for testing and advanced diagnostics. Not intended for normal use.
     /// The nodes are ordered such that the earliest deadline is on the left.
     const auto& getTree() const noexcept { return tree_; }
 
   private:
     using Tree = cavl::Tree<Event<time_point>>;
+
+    [[nodiscard]] static time_point traceStart(const time_point approx_now)
+    {
+        if constexpr (TraceExecution) {
+            return Clock::now();
+        }
+        return approx_now;
+    }
+
+    void traceStop(const std::size_t trace_index, const time_point execution_started_at, time_point& approx_now)
+    {
+        if constexpr (TraceExecution) {
+            const auto execution_finished_at = Clock::now();
+            this->recordTrace(trace_index, execution_finished_at - execution_started_at);
+            approx_now = execution_finished_at;
+        }
+    }
 
     Tree tree_;
 

@@ -130,6 +130,17 @@ add_custom_target(run_basic_example_cpp
           USES_TERMINAL
   )
 
+add_executable(task_trace ${CMAKE_CURRENT_SOURCE_DIR}/examples/task_trace.cpp)
+set_target_properties(task_trace PROPERTIES CXX_STANDARD 20)
+target_include_directories(task_trace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/olga_scheduler)
+target_include_directories(task_trace SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/cavl)
+target_compile_options(task_trace PRIVATE -Wall -Wextra -Werror -pedantic)
+add_custom_target(run_task_trace
+            COMMAND $<TARGET_FILE:task_trace>
+            DEPENDS task_trace
+            USES_TERMINAL
+    )
+
 add_custom_target(examples)
 add_dependencies(examples basic_example_c basic_example_cpp)
 add_test(NAME BuildExamples
